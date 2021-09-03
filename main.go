@@ -54,7 +54,7 @@ func resolveRepository() (string, error) {
 	return repo, nil
 }
 
-func runMC(opts contributeOpts) error {
+func runMC(opts mcOpts) error {
 	return nil
 }
 
