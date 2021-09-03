@@ -1,19 +1,15 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
-	"strings"
 	"time"
 
-	"github.com/cli/safeexec"
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/cli/cli/pkg/prompt"
+	"github.com/gdamore/tcell/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -77,22 +73,168 @@ func runMC(opts mcOpts) error {
 		issues[i], issues[j] = issues[j], issues[i]
 	})
 
+	style := tcell.StyleDefault
+
+	s, err := tcell.NewScreen()
+	if err != nil {
+		return err
+	}
+	if err = s.Init(); err != nil {
+		return err
+	}
+	s.SetStyle(style)
+
+	game := &Game{
+		debug:    debug,
+		Screen:   s,
+		Style:    style,
+		MaxWidth: 80,
+		Logger:   logger,
+	}
+
+	err = game.LoadState()
+	if err != nil {
+		game.Debugf("failed to load state: %s", err)
+	}
+
+	// TODO enforce game dimensions, don't bother supporting resizes
+
+	issueSpawners := []*IssueSpawner{}
+	y := 2
+	x := 0
+	for i := 0; i < 10; i++ {
+		if i%2 == 0 {
+			x = 0
+		} else {
+			x = game.MaxWidth
+		}
+
+		is := NewIssueSpawner(x, y+i, game)
+
+		issueSpawners = append(issueSpawners, is)
+		game.AddDrawable(is)
+	}
+
+	for ix, issueText := range issues {
+		spawnerIx := ix % len(issueSpawners)
+		issueSpawners[spawnerIx].AddIssue(issueText)
+	}
+
+	cl := NewCommitLauncher(game, shas)
+	cl.Transform(37, 13)
+	game.AddDrawable(cl)
+
+	cc := NewCommitCounter(35, 14, cl, game)
+	game.AddDrawable(cc)
+
+	score := NewScore(38, 18, game)
+	game.AddDrawable(score)
+
+	scoreLog := NewScoreLog(15, 15, game)
+	game.AddDrawable(scoreLog)
+
+	game.AddDrawable(NewLegend(1, 15, game))
+
+	highScores := NewHighScores(60, 15, game)
+	game.AddDrawable(highScores)
+
+	quit := make(chan struct{})
+	go func() {
+		for {
+			ev := s.PollEvent()
+			switch ev := ev.(type) {
+			case *tcell.EventKey:
+				switch ev.Rune() {
+				case ' ':
+					cl.Launch()
+				case 'q':
+					close(quit)
+					return
+				}
+				switch ev.Key() {
+				case tcell.KeyEscape:
+					close(quit)
+					return
+				case tcell.KeyCtrlL:
+					s.Sync()
+				case tcell.KeyLeft:
+					cl.Transform(-1, 0)
+				case tcell.KeyRight:
+					cl.Transform(1, 0)
+				}
+			case *tcell.EventResize:
+				s.Sync()
+			}
+		}
+	}()
+
+	// TODO UI
+	// - high score listing
+	// - "now playing" note
+	// TODO high score saving/loading
+
+loop:
+	for {
+		select {
+		case <-quit:
+			break loop
+		case <-time.After(time.Millisecond * 100):
+		}
+
+		s.Clear()
+		spawner := issueSpawners[rand.Intn(len(issueSpawners))]
+		spawner.Spawn()
+		game.Update()
+		game.Draw()
+		titleStyle := style.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
+		drawStr(s, 25, 0, titleStyle, "!!! M E R G E  C O N F L I C T !!!")
+		s.Show()
+	}
+
+	s.Fini()
+
+	// TODO this following code is very bad, abstract to function and clean up
+	// TODO GetState helper on Game
+	// TODO likely reference issue on the high score map
+	hs := map[string]int{}
+	hs, ok := game.State["HighScores"].(map[string]int)
+	if !ok {
+		game.Debugf("failed to save high scores")
+		return nil
+	}
+
+	maxScore := 0
+	for _, v := range hs {
+		if v > maxScore {
+			maxScore = v
+		}
+	}
+
+	if score.score >= maxScore && score.score > 0 {
+		answer := false
+		err = prompt.SurveyAskOne(
+			&survey.Confirm{
+				Message: "new high score! save it?",
+			}, &answer)
+		if err == nil && answer {
+			answer := ""
+			err = prompt.SurveyAskOne(
+				&survey.Input{
+					Message: "name",
+				}, &answer)
+			if err == nil {
+				hs[answer] = score.score
+				err = game.SaveState()
+				if err != nil {
+					game.Debugf("failed to save state: %s", err)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
-func resolveRepository() (string, error) {
-	sout, eout, err := gh("repo", "view")
-	if err != nil {
-		if strings.Contains(eout.String(), "not a git repository") {
-			return "", errors.New("Try running this command from inside a git repository or with the -R flag")
-		}
-		return "", err
-	}
-	viewOut := strings.Split(sout.String(), "\n")[0]
-	repo := strings.TrimSpace(strings.Split(viewOut, ":")[1])
-
-	return repo, nil
-}
 func main() {
 	rc := rootCmd()
 
@@ -100,132 +242,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
-}
-
-// gh shells out to gh, returning STDOUT/STDERR and any error
-func gh(args ...string) (sout, eout bytes.Buffer, err error) {
-	ghBin, err := safeexec.LookPath("gh")
-	if err != nil {
-		err = fmt.Errorf("could not find gh. Is it installed? error: %w", err)
-		return
-	}
-
-	cmd := exec.Command(ghBin, args...)
-	cmd.Stderr = &eout
-	cmd.Stdout = &sout
-
-	err = cmd.Run()
-	if err != nil {
-		err = fmt.Errorf("failed to run gh. error: %w, stderr: %s", err, eout.String())
-		return
-	}
-
-	return
-}
-
-func getSHAs(repo string) ([]string, error) {
-	cmdArgs := []string{
-		"api",
-		fmt.Sprintf("repos/%s/commits", repo),
-		"--paginate",
-		"--cache", "24h",
-		"--jq", ".[]|.sha",
-	}
-
-	sout, _, err := gh(cmdArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("gh call failed: %w", err)
-	}
-
-	split := strings.Split(sout.String(), "\n")
-
-	out := []string{}
-
-	for _, l := range split {
-		if l == "" {
-			continue
-		}
-		out = append(out, l)
-	}
-
-	return out, nil
-}
-
-func getIssues(repo string) ([]string, error) {
-	query := `
-		query GetIssuesForMC($owner: String!, $repo: String!, $endCursor: String) {
-			repository(owner: $owner, name: $repo) {
-				hasIssuesEnabled
-				issues(first: 100, after: $endCursor, states: [OPEN]) {
-					nodes {
-						number
-						title
-					}
-					pageInfo {
-						hasNextPage
-						endCursor
-					}
-				}
-			}
-		}`
-	parts := strings.Split(repo, "/")
-	owner := parts[0]
-	name := parts[1]
-
-	cmdArgs := []string{
-		"api", "graphql",
-		"--paginate",
-		"--cache", "24h",
-		"-f", fmt.Sprintf("query=%s", query),
-		"-f", fmt.Sprintf("owner=%s", owner),
-		"-f", fmt.Sprintf("repo=%s", name),
-		"--jq", ".[]",
-	}
-
-	sout, _, err := gh(cmdArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("gh call failed: %w", err)
-	}
-
-	type Doc struct {
-		Repository struct {
-			HasIssuesEnabled bool
-			Issues           struct {
-				Nodes []struct {
-					Number int
-					Title  string
-				}
-				PageInfo struct {
-					HasNextPage bool
-					EndCursor   string
-				}
-			}
-		}
-	}
-
-	out := []string{}
-
-	dec := json.NewDecoder(strings.NewReader(sout.String()))
-	for {
-		var doc Doc
-
-		err := dec.Decode(&doc)
-		if err == io.EOF {
-			// all done
-			break
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if !doc.Repository.HasIssuesEnabled {
-			return nil, errors.New("can only play in repositories with issues enabled")
-		}
-
-		for _, issue := range doc.Repository.Issues.Nodes {
-			out = append(out, fmt.Sprintf("#%d %s", issue.Number, issue.Title))
-		}
-
-	}
-	return out, nil
 }
