@@ -124,8 +124,31 @@ func gh(args ...string) (sout, eout bytes.Buffer, err error) {
 }
 
 func getSHAs(repo string) ([]string, error) {
-	// TODO
-	return []string{}, nil
+	cmdArgs := []string{
+		"api",
+		fmt.Sprintf("repos/%s/commits", repo),
+		"--paginate",
+		"--cache", "24h",
+		"--jq", ".[]|.sha",
+	}
+
+	sout, _, err := gh(cmdArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("gh call failed: %w", err)
+	}
+
+	split := strings.Split(sout.String(), "\n")
+
+	out := []string{}
+
+	for _, l := range split {
+		if l == "" {
+			continue
+		}
+		out = append(out, l)
+	}
+
+	return out, nil
 }
 
 func getIssues(repo string) ([]string, error) {
