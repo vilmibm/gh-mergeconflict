@@ -2,11 +2,16 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/cli/safeexec"
 	"github.com/spf13/cobra"
@@ -14,6 +19,7 @@ import (
 
 type mcOpts struct {
 	Repository string
+	Debug      bool
 }
 
 func rootCmd() *cobra.Command {
@@ -36,8 +42,42 @@ func rootCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&opts.Repository, "repo", "R", "", "Repository to play in")
+	cmd.Flags().BoolVarP(&opts.Debug, "debug", "d", false, "enable logging")
 
 	return cmd
+}
+
+func runMC(opts mcOpts) error {
+	debug := opts.Debug
+
+	var logger *log.Logger
+	if debug {
+		f, _ := os.Create("mclog.txt")
+		logger = log.New(f, "", log.Lshortfile)
+		logger.Println("mc logging")
+	}
+
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	issues, err := getIssues(opts.Repository)
+	if err != nil {
+		return fmt.Errorf("failed to get issues for %s: %w", opts.Repository, err)
+	}
+
+	fmt.Printf("DBG %#v\n", issues)
+
+	shas, err := getSHAs(opts.Repository)
+	if err != nil {
+		return fmt.Errorf("failed to get shas for %s: %w", opts.Repository, err)
+	}
+
+	fmt.Printf("DBG %#v\n", shas)
+
+	rand.Shuffle(len(issues), func(i, j int) {
+		issues[i], issues[j] = issues[j], issues[i]
+	})
+
+	return nil
 }
 
 func resolveRepository() (string, error) {
@@ -53,11 +93,6 @@ func resolveRepository() (string, error) {
 
 	return repo, nil
 }
-
-func runMC(opts mcOpts) error {
-	return nil
-}
-
 func main() {
 	rc := rootCmd()
 
@@ -86,4 +121,88 @@ func gh(args ...string) (sout, eout bytes.Buffer, err error) {
 	}
 
 	return
+}
+
+func getSHAs(repo string) ([]string, error) {
+	// TODO
+	return []string{}, nil
+}
+
+func getIssues(repo string) ([]string, error) {
+	query := `
+		query GetIssuesForMC($owner: String!, $repo: String!, $endCursor: String) {
+			repository(owner: $owner, name: $repo) {
+				hasIssuesEnabled
+				issues(first: 100, after: $endCursor, states: [OPEN]) {
+					nodes {
+						number
+						title
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}`
+	parts := strings.Split(repo, "/")
+	owner := parts[0]
+	name := parts[1]
+
+	cmdArgs := []string{
+		"api", "graphql",
+		"--paginate",
+		"--cache", "24h",
+		"-f", fmt.Sprintf("query=%s", query),
+		"-f", fmt.Sprintf("owner=%s", owner),
+		"-f", fmt.Sprintf("repo=%s", name),
+		"--jq", ".[]",
+	}
+
+	sout, _, err := gh(cmdArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("gh call failed: %w", err)
+	}
+
+	type Doc struct {
+		Repository struct {
+			HasIssuesEnabled bool
+			Issues           struct {
+				Nodes []struct {
+					Number int
+					Title  string
+				}
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   string
+				}
+			}
+		}
+	}
+
+	out := []string{}
+
+	dec := json.NewDecoder(strings.NewReader(sout.String()))
+	for {
+		var doc Doc
+
+		err := dec.Decode(&doc)
+		if err == io.EOF {
+			// all done
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if !doc.Repository.HasIssuesEnabled {
+			return nil, errors.New("can only play in repositories with issues enabled")
+		}
+
+		for _, issue := range doc.Repository.Issues.Nodes {
+			out = append(out, fmt.Sprintf("#%d %s", issue.Number, issue.Title))
+		}
+
+	}
+	return out, nil
 }
