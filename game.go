@@ -120,7 +120,15 @@ func (g *Game) LoadState() error {
 }
 
 func (g *Game) SaveState() error {
-	// TODO
+	marshed, err := yaml.Marshal(g.State)
+	if err != nil {
+		return fmt.Errorf("failed to serialize game state: %w", err)
+	}
+
+	err = os.WriteFile(filepath.Join(stateDir(), stateFilename), marshed, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to save game state to disk: %w", err)
+	}
 
 	return nil
 }
