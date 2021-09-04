@@ -60,14 +60,10 @@ func runMC(opts mcOpts) error {
 		return fmt.Errorf("failed to get issues for %s: %w", opts.Repository, err)
 	}
 
-	fmt.Printf("DBG %#v\n", issues)
-
 	shas, err := getSHAs(opts.Repository)
 	if err != nil {
 		return fmt.Errorf("failed to get shas for %s: %w", opts.Repository, err)
 	}
-
-	fmt.Printf("DBG %#v\n", shas)
 
 	rand.Shuffle(len(issues), func(i, j int) {
 		issues[i], issues[j] = issues[j], issues[i]

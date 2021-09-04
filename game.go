@@ -4,11 +4,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	XDG_STATE_HOME = "XDG_STATE_HOME"
+	LOCAL_APP_DATA = "LocalAppData"
 )
 
 type Drawable interface {
@@ -64,12 +72,38 @@ func (g *Game) Debugf(format string, v ...interface{}) {
 	g.Logger.Printf(format, v...)
 }
 
-// TODO TODO TODO TODO TODO
-var stateFilePath string = "/home/vilmibm/.local/state/gh/mc.yml"
+var stateFilename string = "mc.yml"
 
-// TODO TODO TODO TODO TODO
+func dirExists(path string) bool {
+	f, err := os.Stat(path)
+	return err == nil && f.IsDir()
+}
+
+// State path precedence
+// 1. XDG_CONFIG_HOME
+// 2. LocalAppData (windows only)
+// 3. HOME
+func stateDir() string {
+	var path string
+	if a := os.Getenv(XDG_STATE_HOME); a != "" {
+		path = filepath.Join(a, "gh")
+	} else if b := os.Getenv(LOCAL_APP_DATA); runtime.GOOS == "windows" && b != "" {
+		path = filepath.Join(b, "GitHub CLI")
+	} else {
+		c, _ := os.UserHomeDir()
+		path = filepath.Join(c, ".local", "state", "gh")
+	}
+
+	// If the path does not exist try migrating state from default paths
+	if !dirExists(path) {
+		_ = os.MkdirAll(path, 0755)
+	}
+
+	return path
+}
 
 func (g *Game) LoadState() error {
+	stateFilePath := filepath.Join(stateDir(), stateFilename)
 	g.State = map[string]interface{}{}
 	g.State["HighScores"] = map[string]int{}
 
