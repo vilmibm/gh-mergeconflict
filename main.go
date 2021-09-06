@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -10,6 +11,11 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/gdamore/tcell/v2"
 	"github.com/spf13/cobra"
+)
+
+const (
+	minWidth  = 80
+	minHeight = 21
 )
 
 type mcOpts struct {
@@ -47,6 +53,7 @@ func runMC(opts mcOpts) error {
 
 	var logger *log.Logger
 	if debug {
+		// TODO seriously do a tempfile
 		f, _ := os.Create("mclog.txt")
 		logger = log.New(f, "", log.Lshortfile)
 		logger.Println("mc logging")
@@ -79,12 +86,17 @@ func runMC(opts mcOpts) error {
 	}
 	s.SetStyle(style)
 
+	w, h := s.Size()
+	if w < minWidth || h < minHeight {
+		return errors.New("screen too small, need 80x20 at least.")
+	}
+
 	game := &Game{
 		Repo:     opts.Repository,
 		debug:    debug,
 		Screen:   s,
 		Style:    style,
-		MaxWidth: 80,
+		MaxWidth: minWidth,
 		Logger:   logger,
 	}
 
