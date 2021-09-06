@@ -48,7 +48,20 @@ func (g *GameObject) Draw() {
 		style = *g.StyleOverride
 	}
 	lines := strings.Split(g.Sprite, "\n")
-	for i, l := range lines {
+	for i, line := range lines {
+		l := line
+		w := runewidth.StringWidth(line)
+		if g.x+w > g.Game.MaxWidth {
+			space := g.Game.MaxWidth - g.x
+			comb := []rune{}
+			for i, r := range line {
+				if i > space {
+					break
+				}
+				comb = append(comb, r)
+			}
+			l = string(comb)
+		}
 		drawStr(screen, g.x, g.y+i, style, l)
 	}
 }
