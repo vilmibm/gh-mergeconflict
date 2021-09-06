@@ -345,8 +345,8 @@ func NewHighScores(x, y int, g *Game) *GameObject {
 	sprite := "~* high scores *~"
 	highScores, ok := g.State.HighScores[g.Repo]
 	if ok {
-		for _, v := range highScores {
-			sprite += fmt.Sprintf("\n%s %d", v.Name, v.Score)
+		for x := len(highScores) - 1; x >= 0; x-- {
+			sprite += fmt.Sprintf("\n%s %d", highScores[x].Name, highScores[x].Score)
 		}
 	}
 	return &GameObject{

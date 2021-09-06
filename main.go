@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/cli/cli/pkg/prompt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/spf13/cobra"
 )
@@ -212,21 +211,19 @@ loop:
 	if score.score >= maxScore && score.score > 0 {
 		answer := false
 		// TODO switch to plain survey
-		err = prompt.SurveyAskOne(
+		err = survey.AskOne(
 			&survey.Confirm{
 				Message: "new high score! save it?",
 			}, &answer)
 		if err == nil && answer {
 			answer := ""
-			err = prompt.SurveyAskOne(
+			err = survey.AskOne(
 				&survey.Input{
 					Message: "name",
 				}, &answer)
 			if err == nil {
-				game.Debugf("ABOUT TO SET")
-				game.Debugf("%#v", game.State)
-				game.Debugf("%s", answer)
-				game.Debugf("%d", score.score)
+				game.Debugf("ABOUT TO SET HIGH SCORE")
+				game.Debugf("%#v %s %d", game.State, answer, score.score)
 				game.State.HighScores[opts.Repository] = append(game.State.HighScores[opts.Repository], scoreEntry{
 					Name:  answer,
 					Score: score.score,
