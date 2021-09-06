@@ -81,6 +81,7 @@ func runMC(opts mcOpts) error {
 	s.SetStyle(style)
 
 	game := &Game{
+		Repo:     opts.Repository,
 		debug:    debug,
 		Screen:   s,
 		Style:    style,
@@ -191,23 +192,26 @@ loop:
 
 	// TODO this following code is very bad, abstract to function and clean up
 	// TODO GetState helper on Game
-	// TODO likely reference issue on the high score map
-	hs := map[string]int{}
-	hs, ok := game.State["HighScores"].(map[string]int)
+	_, ok := game.State.HighScores[opts.Repository]
 	if !ok {
-		game.Debugf("failed to save high scores")
-		return nil
+		game.State.HighScores[opts.Repository] = []scoreEntry{}
 	}
 
+	game.Debugf("%#v\n", game.State.HighScores)
+
 	maxScore := 0
-	for _, v := range hs {
-		if v > maxScore {
-			maxScore = v
+	for _, v := range game.State.HighScores[opts.Repository] {
+		if v.Score > maxScore {
+			maxScore = v.Score
 		}
 	}
 
+	game.Debugf("%#v\n", maxScore)
+	game.Debugf("%#v\n", score.score)
+
 	if score.score >= maxScore && score.score > 0 {
 		answer := false
+		// TODO switch to plain survey
 		err = prompt.SurveyAskOne(
 			&survey.Confirm{
 				Message: "new high score! save it?",
@@ -219,8 +223,16 @@ loop:
 					Message: "name",
 				}, &answer)
 			if err == nil {
-				hs[answer] = score.score
+				game.Debugf("ABOUT TO SET")
+				game.Debugf("%#v", game.State)
+				game.Debugf("%s", answer)
+				game.Debugf("%d", score.score)
+				game.State.HighScores[opts.Repository] = append(game.State.HighScores[opts.Repository], scoreEntry{
+					Name:  answer,
+					Score: score.score,
+				})
 				err = game.SaveState()
+				game.Debugf("%#v", game.State)
 				if err != nil {
 					game.Debugf("failed to save state: %s", err)
 				}

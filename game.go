@@ -56,13 +56,14 @@ func (g *GameObject) Draw() {
 type Direction int // either -1 or 1
 
 type Game struct {
+	Repo      string
 	debug     bool
 	drawables []Drawable
 	Screen    tcell.Screen
 	Style     tcell.Style
 	MaxWidth  int
 	Logger    *log.Logger
-	State     map[string]interface{}
+	State     *stateEntry
 }
 
 func (g *Game) Debugf(format string, v ...interface{}) {
@@ -102,19 +103,37 @@ func stateDir() string {
 	return path
 }
 
+type scoreEntry struct {
+	// TODO can't use a map bc name is not unique.
+	Name  string
+	Score int
+}
+
+type stateEntry struct {
+	HighScores map[string][]scoreEntry
+}
+
 func (g *Game) LoadState() error {
 	stateFilePath := filepath.Join(stateDir(), stateFilename)
-	g.State = map[string]interface{}{}
-	g.State["HighScores"] = map[string]int{}
+
+	g.Debugf("opening %s", stateFilePath)
 
 	content, err := ioutil.ReadFile(stateFilePath)
-	if err != nil {
+	if err == nil {
+		g.Debugf("read: %s", content)
+		err = yaml.Unmarshal(content, &g.State)
+		if err != nil {
+			return err
+		}
+	} else if strings.Contains(err.Error(), "no such file") {
+		g.State = &stateEntry{
+			HighScores: map[string][]scoreEntry{},
+		}
+	} else {
 		return err
 	}
-	err = yaml.Unmarshal(content, &g.State)
-	if err != nil {
-		return err
-	}
+
+	g.Debugf("%#v", g.State)
 
 	return nil
 }
@@ -124,6 +143,9 @@ func (g *Game) SaveState() error {
 	if err != nil {
 		return fmt.Errorf("failed to serialize game state: %w", err)
 	}
+
+	g.Debugf("MARSHED %#v", string(marshed))
+	g.Debugf("STATE %#v", g.State)
 
 	err = os.WriteFile(filepath.Join(stateDir(), stateFilename), marshed, 0644)
 	if err != nil {
