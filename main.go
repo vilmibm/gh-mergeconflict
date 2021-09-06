@@ -154,9 +154,14 @@ func runMC(opts mcOpts) error {
 				case tcell.KeyCtrlL:
 					s.Sync()
 				case tcell.KeyLeft:
-					cl.Transform(-1, 0)
+					if cl.x > 0 {
+						cl.Transform(-1, 0)
+					}
 				case tcell.KeyRight:
-					cl.Transform(1, 0)
+					if cl.w+cl.x < game.MaxWidth {
+						cl.Transform(1, 0)
+
+					}
 				}
 			case *tcell.EventResize:
 				s.Sync()
