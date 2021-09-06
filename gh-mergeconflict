@@ -2,7 +2,7 @@
 set -e
 
 repo="vilmibm/gh-mergeconflict"
-tag="v1.0.0"
+tag="v1.0.1"
 
 extensionPath="$(dirname "$0")"
 arch="$(uname -m)"
