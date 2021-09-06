@@ -223,7 +223,7 @@ loop:
 		titleStyle := style.Foreground(tcell.ColorBlack).Background(tcell.ColorWhite)
 		title := "!!! M E R G E  C O N F L I C T !!!"
 		drawStr(s, 25, 0, titleStyle, title)
-		drawStr(s, 25+len(title)+3, 0, style, fmt.Sprintf("now playing: %s", opts.Repository))
+		drawStr(s, 25+len(title)+3, 0, style, fmt.Sprintf("np: %s", opts.Repository))
 		s.Show()
 	}
 
