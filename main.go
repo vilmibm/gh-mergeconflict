@@ -182,6 +182,28 @@ func runMC(opts mcOpts) error {
 				close(quit)
 				return
 			}
+			spawnersEmpty := true
+			for _, s := range issueSpawners {
+				if len(s.issues) > 0 {
+					spawnersEmpty = false
+					break
+				}
+			}
+
+			issuesRemain := false
+			_ = game.FilterGameObjects(func(gobj Drawable) bool {
+				_, ok := gobj.(*Issue)
+				if ok {
+					issuesRemain = true
+					return false
+				}
+				return true
+			})
+
+			if spawnersEmpty && !issuesRemain {
+				close(quit)
+				return
+			}
 		}
 	}()
 
