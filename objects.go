@@ -239,8 +239,7 @@ func (cl *CommitLauncher) Launch() {
 	}
 	cl.cooldown = 4
 
-	if len(cl.Shas) == 1 {
-		// TODO need to signal game over
+	if len(cl.Shas) == 0 {
 		return
 	}
 	sha := cl.Shas[0]

@@ -178,13 +178,12 @@ func runMC(opts mcOpts) error {
 			case *tcell.EventResize:
 				s.Sync()
 			}
+			if len(cl.Shas) == 0 {
+				close(quit)
+				return
+			}
 		}
 	}()
-
-	// TODO UI
-	// - high score listing
-	// - "now playing" note
-	// TODO high score saving/loading
 
 loop:
 	for {
@@ -229,7 +228,6 @@ loop:
 
 	if score.score >= maxScore && score.score > 0 {
 		answer := false
-		// TODO switch to plain survey
 		err = survey.AskOne(
 			&survey.Confirm{
 				Message: "new high score! save it?",
