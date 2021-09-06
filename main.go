@@ -105,8 +105,6 @@ func runMC(opts mcOpts) error {
 		game.Debugf("failed to load state: %s", err)
 	}
 
-	// TODO enforce game dimensions, don't bother supporting resizes
-
 	issueSpawners := []*IssueSpawner{}
 	y := 2
 	x := 0

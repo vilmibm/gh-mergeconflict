@@ -83,8 +83,6 @@ func (is *IssueSpawner) Update() {
 
 func (is *IssueSpawner) Spawn() {
 	if is.countdown > 0 || len(is.issues) == 0 {
-		// TODO eventually, notice if all spawners are empty and trigger win condition
-		//is.Game.Debugf("%s is dry", is)
 		return
 	}
 

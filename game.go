@@ -117,7 +117,6 @@ func stateDir() string {
 }
 
 type scoreEntry struct {
-	// TODO can't use a map bc name is not unique.
 	Name  string
 	Score int
 }
